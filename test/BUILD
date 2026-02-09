@@ -18,6 +18,12 @@ lld_override(
     lld_linkopts = ["-Wl,-sectcreate,LLD,ENABLED,/dev/null"],
 )
 
+lld_override(
+    name = "lld_with_location",
+    data = [":main.c"],
+    lld_linkopts = ["-Wl,-sectcreate,LLD,LOCATION,$(location :main.c)"],
+)
+
 cc_test(
     name = "default_test",
     srcs = ["main.c"],
@@ -39,6 +45,12 @@ cc_test(
     name = "lld_linkopts_test",
     srcs = ["main.c"],
     deps = [":lld"],
+)
+
+cc_test(
+    name = "lld_location_test",
+    srcs = ["main.c"],
+    deps = [":lld_with_location"],
 )
 
 cc_library(
@@ -142,4 +154,13 @@ action_command_line_test(
         "--ld-path=external/$(BZLMOD)rules_apple_linker_lld/ld64.lld",
     ],
     target_under_test = ":default_test",
+)
+
+action_command_line_test(
+    name = "lld_location_expansion_test",
+    expected_argv = [
+        "-Wl,-sectcreate,LLD,LOCATION,test/main.c",
+    ],
+    mnemonics = ["CppLink"],
+    target_under_test = ":lld_location_test",
 )

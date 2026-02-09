@@ -5,6 +5,11 @@ Rules for overridding the linker for Apple builds
 # TODO: Remove once we drop bazel 7.x support
 _HAS_OBJC_PROVIDER_LINKOPT = hasattr(apple_common.new_objc_provider(), "linkopt")
 
+# Build the provides list, only including Objc if it exists (removed in Bazel 9+)
+_PROVIDES = [CcInfo]
+if apple_common.Objc != None:
+    _PROVIDES.append(apple_common.Objc)
+
 def _attrs(linker, extra_attrs):
     """
     Get the shared attributes for all the linker rules
@@ -22,14 +27,18 @@ def _attrs(linker, extra_attrs):
             doc = "The linker to use",
         ),
         "ld64_linkopts": attr.string_list(
-            doc = "The options to pass to ld64 if 'enable' is False",
+            doc = "The options to pass to ld64 if 'enable' is False. Supports $(location ...) expansion.",
         ),
         "linkopts": attr.string_list(
-            doc = "The options to pass to both the overriden linker and ld64",
+            doc = "The options to pass to both the overriden linker and ld64. Supports $(location ...) expansion.",
         ),
         "enable": attr.bool(
             default = True,
             doc = "Whether to enable the overriden linker, useful for disabling with select",
+        ),
+        "data": attr.label_list(
+            allow_files = True,
+            doc = "Files needed for $(location ...) expansion in linkopt attributes",
         ),
     }
     attrs.update(extra_attrs)
@@ -46,14 +55,20 @@ def _linker_override(ctx, override_linkopts):
     if not ctx.attr.linker:
         fail("error: linker not specified")
 
-    linkopts = list(ctx.attr.linkopts)
+    # Expand $(location ...) references in linkopt strings
+    data_targets = ctx.attr.data
+    expanded_linkopts = [ctx.expand_location(opt, data_targets) for opt in ctx.attr.linkopts]
+    expanded_override_linkopts = [ctx.expand_location(opt, data_targets) for opt in override_linkopts]
+    expanded_ld64_linkopts = [ctx.expand_location(opt, data_targets) for opt in ctx.attr.ld64_linkopts]
+
+    linkopts = list(expanded_linkopts)
     if ctx.attr.enable:
         linker_inputs_depset = ctx.attr.linker[DefaultInfo].files
         linkopts.append("--ld-path={}".format(ctx.attr.linker[DefaultInfo].files_to_run.executable.path))
-        linkopts.extend(override_linkopts)
+        linkopts.extend(expanded_override_linkopts)
     else:
         linker_inputs_depset = depset([])
-        linkopts.extend(ctx.attr.ld64_linkopts)
+        linkopts.extend(expanded_ld64_linkopts)
 
     linkopts_depset = depset(direct = linkopts, order = "topological")
 
@@ -89,11 +104,11 @@ apple_linker_override = rule(
         {
             "override_linkopts": attr.string_list(
                 mandatory = False,
-                doc = "The options to pass to the custom linker, and not ld64 (see enable)",
+                doc = "The options to pass to the custom linker, and not ld64 (see enable). Supports $(location ...) expansion.",
             ),
         },
     ),
-    provides = [apple_common.Objc, CcInfo],
+    provides = _PROVIDES,
 )
 
 def _lld_override(ctx):
@@ -106,9 +121,9 @@ lld_override = rule(
         {
             "lld_linkopts": attr.string_list(
                 mandatory = False,
-                doc = "The options to pass to lld, and not ld64 (see enable)",
+                doc = "The options to pass to lld, and not ld64 (see enable). Supports $(location ...) expansion.",
             ),
         },
     ),
-    provides = [apple_common.Objc, CcInfo],
+    provides = _PROVIDES,
 )

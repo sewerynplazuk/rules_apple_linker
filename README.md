@@ -97,6 +97,22 @@ lld_override(
 )
 ```
 
+### Using $(location ...) for file references
+
+You can reference files in your linkopt attributes using Bazel's `$(location ...)` syntax:
+
+```bzl
+load("@rules_apple_linker//:rules.bzl", "lld_override")
+
+lld_override(
+    name = "lld",
+    data = ["//path/to:file"],
+    lld_linkopts = ["-Wl,-sectcreate,__DATA,__config,$(location //path/to:file)"],
+)
+```
+
+The `data` attribute declares which files can be referenced. The `$(location ...)` expressions will be expanded to actual file paths at build time.
+
 ## Custom linkers
 
 If you'd like to provide your own binary or bazel rule for the linker
